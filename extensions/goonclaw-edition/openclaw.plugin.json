@@ -1,0 +1,14 @@
+{
+  "id": "goonclaw-edition",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "quiet": {
+        "type": "boolean",
+        "description": "Suppress the GoonClaw edition startup log line. Default false.",
+        "default": false
+      }
+    }
+  }
+}

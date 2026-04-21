@@ -21,6 +21,7 @@ describe("formatCliBannerLine", () => {
     const line = formatCliBannerLine("2026.3.7", {
       commit: "abc1234",
       richTty: false,
+      env: { OPENCLAW_BRAND_NAME: "OpenClaw" },
     });
 
     expect(line).toBe("🦞 OpenClaw 2026.3.7 (abc1234)");
@@ -32,6 +33,7 @@ describe("formatCliBannerLine", () => {
     const line = formatCliBannerLine("2026.3.7", {
       commit: "abc1234",
       richTty: false,
+      env: { OPENCLAW_BRAND_NAME: "OpenClaw" },
     });
 
     expect(line).toBe("🦞 OpenClaw 2026.3.7 (abc1234) — All your chats, one OpenClaw.");
@@ -44,8 +46,33 @@ describe("formatCliBannerLine", () => {
       commit: "abc1234",
       richTty: false,
       mode: "default",
+      env: { OPENCLAW_BRAND_NAME: "OpenClaw" },
     });
 
     expect(line).toBe("🦞 OpenClaw 2026.3.7 (abc1234) — All your chats, one OpenClaw.");
+  });
+
+  it("defaults the brand label to GoonClaw (on OpenClaw) when no env override is set", () => {
+    readCliBannerTaglineModeMock.mockReturnValue("off");
+
+    const line = formatCliBannerLine("2026.3.7", {
+      commit: "abc1234",
+      richTty: false,
+      env: {},
+    });
+
+    expect(line).toBe("🦞 GoonClaw (on OpenClaw) 2026.3.7 (abc1234)");
+  });
+
+  it("honours OPENCLAW_BRAND_NAME env override", () => {
+    readCliBannerTaglineModeMock.mockReturnValue("off");
+
+    const line = formatCliBannerLine("2026.3.7", {
+      commit: "abc1234",
+      richTty: false,
+      env: { OPENCLAW_BRAND_NAME: "CustomEdition" },
+    });
+
+    expect(line).toBe("🦞 CustomEdition 2026.3.7 (abc1234)");
   });
 });

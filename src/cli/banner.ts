@@ -44,13 +44,27 @@ function resolveTaglineMode(options: BannerOptions): TaglineMode | undefined {
   return readCliBannerTaglineMode(options.env);
 }
 
+/**
+ * Brand label shown on the CLI banner. Defaults to "GoonClaw (on OpenClaw)"
+ * in this fork; override with `OPENCLAW_BRAND_NAME` to get plain "OpenClaw"
+ * (upstream) or any custom label.
+ */
+function resolveBrandLabel(env?: Record<string, string | undefined>): string {
+  const source = env ?? process.env;
+  const raw = source.OPENCLAW_BRAND_NAME;
+  if (typeof raw === "string" && raw.trim().length > 0) {
+    return raw.trim();
+  }
+  return "GoonClaw (on OpenClaw)";
+}
+
 export function formatCliBannerLine(version: string, options: BannerOptions = {}): string {
   const commit =
     options.commit ?? resolveCommitHash({ env: options.env, moduleUrl: import.meta.url });
   const commitLabel = commit ?? "unknown";
   const tagline = pickTagline({ ...options, mode: resolveTaglineMode(options) });
   const rich = options.richTty ?? isRich();
-  const title = "🦞 OpenClaw";
+  const title = `🦞 ${resolveBrandLabel(options.env)}`;
   const prefix = "🦞 ";
   const columns = options.columns ?? process.stdout.columns ?? 120;
   const plainBaseLine = `${title} ${version} (${commitLabel})`;
@@ -91,7 +105,7 @@ const LOBSTER_ASCII = [
   "██░███░██░▀▀░██░▄▄▄██░█░█░██░█████░████░▀▀░██░█░█░██",
   "██░▀▀▀░██░█████░▀▀▀██░██▄░██░▀▀▄██░▀▀░█░██░██▄▀▄▀▄██",
   "▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀",
-  "                  🦞 OPENCLAW 🦞                    ",
+  "                  🦞 GOONCLAW 🦞                    ",
   " ",
 ];
 
@@ -115,11 +129,11 @@ export function formatCliBannerArt(options: BannerOptions = {}): string {
   };
 
   const colored = LOBSTER_ASCII.map((line) => {
-    if (line.includes("OPENCLAW")) {
+    if (line.includes("GOONCLAW") || line.includes("OPENCLAW")) {
       return (
         theme.muted("              ") +
         theme.accent("🦞") +
-        theme.info(" OPENCLAW ") +
+        theme.info(" GOONCLAW ") +
         theme.accent("🦞")
       );
     }

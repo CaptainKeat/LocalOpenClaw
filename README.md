@@ -1,4 +1,22 @@
-# 🦞 OpenClaw — Personal AI Assistant
+# 🦞 GoonClaw — Personal AI Assistant, GoonClaw edition
+
+> **GoonClaw** is an opinionated fork of [OpenClaw](https://github.com/openclaw/openclaw)
+> maintained by [@CaptainKeat](https://github.com/CaptainKeat). Same gateway,
+> same CLI (`openclaw`), same config paths (`~/.openclaw/`) — plus two bundled
+> plugins baked into this edition:
+>
+> - **`hardware-info`** — tells the agent about your CPU / RAM / GPU and
+>   recommends a local model tier. See [`docs/tools/hardware-info.md`](docs/tools/hardware-info.md).
+> - **`obsidian-agi`** — gives the agent a searchable Markdown notebook in
+>   your Obsidian vault (`knowledge_log` / `_search` / `_recall` / `_summary`
+>   tools). See [`docs/tools/obsidian-agi.md`](docs/tools/obsidian-agi.md).
+>
+> The banner says `🦞 GoonClaw (on OpenClaw)`. Set
+> `OPENCLAW_BRAND_NAME=OpenClaw` to flip back to the plain upstream identity.
+>
+> Everything below this block is the unchanged upstream OpenClaw README.
+
+---
 
 <p align="center">
     <picture>
