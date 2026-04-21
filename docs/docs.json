@@ -1218,6 +1218,7 @@
                   "tools/elevated",
                   "tools/exec",
                   "tools/exec-approvals",
+                  "tools/hardware-info",
                   "tools/image-generation",
                   "tools/music-generation",
                   "tools/llm-task",

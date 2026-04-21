@@ -1,0 +1,15 @@
+{
+  "id": "hardware-info",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "cacheSeconds": {
+        "type": "number",
+        "description": "How long to cache hardware detection results (default 60).",
+        "minimum": 0,
+        "maximum": 3600
+      }
+    }
+  }
+}

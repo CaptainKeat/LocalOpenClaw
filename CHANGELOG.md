@@ -6,6 +6,7 @@ Docs: https://docs.openclaw.ai
 
 ### Changes
 
+- Hardware info: new bundled `hardware-info` plugin exposes a `hardware_info` tool that reports CPU, RAM, and GPU inventory (NVIDIA via `nvidia-smi`, AMD via `rocm-smi` on Linux) and recommends a local-model tier with step-down alternatives. Results cache for 60s by default; configurable via `plugins.entries.hardware-info.config.cacheSeconds` or per-call with `refresh: true`.
 - Onboard/wizard: simplify the security disclaimer copy (drop the yellow banner and warning icon in favor of plain-prose paragraphs), and flip remaining onboarding pickers with long dynamic option lists to searchable autocompletes (search provider, plugin configure, model provider filter).
 - Channels/preview streaming: stream tool-progress updates into live preview edits for Discord, Slack, and Telegram so in-flight replies show incremental tool state in the same preview message before finalization. (#69611) Thanks @thewilloftheshadow.
 - Ollama/onboard: populate the cloud-only model list from `ollama.com/api/tags` so `openclaw onboard` reflects the live cloud catalog instead of a static three-model seed; cap the discovered list at 500 and fall back to the previous hardcoded suggestions when ollama.com is unreachable or returns no models. (#68463) Thanks @BruceMacD.

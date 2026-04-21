@@ -1,0 +1,18 @@
+{
+  "name": "@openclaw/hardware-info-plugin",
+  "version": "2026.4.20",
+  "private": true,
+  "description": "OpenClaw hardware-detection plugin — CPU/RAM/GPU inventory and local-model recommendations",
+  "type": "module",
+  "dependencies": {
+    "@sinclair/typebox": "0.34.49"
+  },
+  "devDependencies": {
+    "@openclaw/plugin-sdk": "workspace:*"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
