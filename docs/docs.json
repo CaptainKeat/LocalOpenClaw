@@ -1220,6 +1220,7 @@
                   "tools/exec-approvals",
                   "tools/hardware-info",
                   "tools/image-generation",
+                  "tools/obsidian-agi",
                   "tools/music-generation",
                   "tools/llm-task",
                   "tools/lobster",

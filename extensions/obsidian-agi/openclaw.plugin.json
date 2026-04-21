@@ -1,0 +1,24 @@
+{
+  "id": "obsidian-agi",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "vaultPath": {
+        "type": "string",
+        "description": "Absolute path to the Obsidian vault root. Falls back to OBSIDIAN_VAULT env var."
+      },
+      "knowledgeFolder": {
+        "type": "string",
+        "description": "Subfolder within the vault where knowledge notes live. Defaults to 'OpenClaw'.",
+        "default": "OpenClaw"
+      },
+      "maxRelated": {
+        "type": "number",
+        "description": "Max related-note links to include per entry (default 5).",
+        "minimum": 0,
+        "maximum": 20
+      }
+    }
+  }
+}
