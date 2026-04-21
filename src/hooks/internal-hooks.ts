@@ -11,6 +11,7 @@ import type { SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { SessionsPatchParams } from "../gateway/protocol/schema/types.js";
 import { formatErrorMessage } from "../infra/errors.js";
+import { redactToolDetail } from "../logging/redact.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveGlobalSingleton } from "../shared/global-singleton.js";
 import type {
@@ -177,6 +178,37 @@ export type SessionPatchHookEvent = InternalHookEvent & {
 };
 
 /**
+ * Context carried by tool-execution hook events.
+ *
+ * Fired *after* a tool has executed (successfully or with an error) so that
+ * hooks can observe the call. Hooks MUST NOT mutate `args` or `result`; the
+ * agent runtime has already consumed both. Hook failures are fire-and-forget
+ * — they never block the agent loop.
+ */
+export type ToolExecutedHookContext = {
+  /** Registered tool name (e.g. "knowledge_log", "run_command"). */
+  toolName: string;
+  /** Provider-supplied tool-call id, if known. */
+  toolCallId?: string;
+  /** The params the tool was invoked with. Treat as read-only. */
+  args: Record<string, unknown>;
+  /** The tool's result object as observed by the runtime. */
+  result: unknown;
+  /** Whether the tool returned an error/isError flag. */
+  isError: boolean;
+  /** Wall-clock duration of the execution in milliseconds. */
+  durationMs?: number;
+  /** Agent id that invoked the tool, if known. */
+  agentId?: string;
+};
+
+export type ToolExecutedHookEvent = InternalHookEvent & {
+  type: "tool";
+  action: "executed";
+  context: ToolExecutedHookContext;
+};
+
+/**
  * Registry of hook handlers by event key.
  *
  * Uses a globalThis singleton so that registerInternalHook and
@@ -327,6 +359,102 @@ export function createInternalHookEvent(
     timestamp: new Date(),
     messages: [],
   };
+}
+
+/**
+ * Redact likely-secret content out of a hook payload before handing it to
+ * untrusted listeners. Stringify → run through the project-wide
+ * `redactToolDetail` pipeline → parse back. Bails safely on circular /
+ * unserializable values and caps payloads so a listener can't OOM on a
+ * runaway tool result.
+ */
+const HOOK_CONTEXT_MAX_BYTES = 64 * 1024;
+
+function redactHookValue(value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  if (typeof value === "string") {
+    try {
+      return redactToolDetail(value);
+    } catch {
+      return value;
+    }
+  }
+  if (typeof value !== "object") {
+    return value;
+  }
+  try {
+    const serialized = JSON.stringify(value);
+    if (typeof serialized !== "string") {
+      return { __redacted: "unserializable" };
+    }
+    if (serialized.length > HOOK_CONTEXT_MAX_BYTES) {
+      return { __redacted: "oversized", __size: serialized.length };
+    }
+    const masked = redactToolDetail(serialized);
+    return JSON.parse(masked);
+  } catch {
+    return { __redacted: "unserializable" };
+  }
+}
+
+/**
+ * Fire-and-forget emit for tool-execution hook events.
+ *
+ * Intentionally never throws: the agent loop must keep running even if
+ * listeners fail or the hook plumbing is mis-wired. Call this after a tool
+ * has produced its final result (success or handled error).
+ *
+ * Short-circuits when no listeners are registered so the hot path stays
+ * cheap — tools fire frequently.
+ *
+ * Secrets in `args`/`result` are run through the project-wide tool-detail
+ * redaction pipeline before listeners see the event. Hook listeners are
+ * treated as untrusted: a bundled hook or a plugin could log the context,
+ * forward it to a channel, or persist it. Keep the payload safe to leak.
+ */
+export async function emitToolExecutedHook(
+  context: ToolExecutedHookContext,
+  opts?: { sessionKey?: string },
+): Promise<void> {
+  if (!internalHooksEnabledState.enabled) {
+    return;
+  }
+  if (!hasInternalHookListeners("tool", "executed")) {
+    return;
+  }
+  try {
+    const redactedArgs = redactHookValue(context.args);
+    const safeContext: ToolExecutedHookContext = {
+      ...context,
+      args:
+        redactedArgs && typeof redactedArgs === "object" && !Array.isArray(redactedArgs)
+          ? (redactedArgs as Record<string, unknown>)
+          : { __redacted: "non-object-args" },
+      result: redactHookValue(context.result),
+    };
+    const event = createInternalHookEvent(
+      "tool",
+      "executed",
+      opts?.sessionKey ?? "",
+      safeContext as unknown as Record<string, unknown>,
+    );
+    await triggerInternalHook(event);
+  } catch {
+    // never propagate into the agent loop
+  }
+}
+
+export function isToolExecutedEvent(event: InternalHookEvent): event is ToolExecutedHookEvent {
+  if (!isHookEventTypeAndAction(event, "tool", "executed")) {
+    return false;
+  }
+  const context = getHookContext<ToolExecutedHookContext>(event);
+  if (!context) {
+    return false;
+  }
+  return hasStringContextField(context, "toolName") && hasBooleanContextField(context, "isError");
 }
 
 function isHookEventTypeAndAction(

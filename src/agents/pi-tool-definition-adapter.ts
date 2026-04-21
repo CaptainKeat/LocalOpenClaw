@@ -4,6 +4,7 @@ import type {
   AgentToolUpdateCallback,
 } from "@mariozechner/pi-agent-core";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { emitToolExecutedHook } from "../hooks/internal-hooks.js";
 import { logDebug, logError } from "../logger.js";
 import { redactToolDetail } from "../logging/redact.js";
 import { isPlainObject } from "../utils.js";
@@ -226,6 +227,7 @@ export function toToolDefinitions(tools: AnyAgentTool[]): ToolDefinition[] {
       execute: async (...args: ToolExecuteArgs): Promise<AgentToolResult<unknown>> => {
         const { toolCallId, params, onUpdate, signal } = splitToolExecuteArgs(args);
         let executeParams = params;
+        const startedAt = Date.now();
         try {
           if (!beforeHookWrapped) {
             const hookOutcome = await runBeforeToolCallHook({
@@ -242,6 +244,17 @@ export function toToolDefinitions(tools: AnyAgentTool[]): ToolDefinition[] {
           const result = normalizeToolExecutionResult({
             toolName: normalizedName,
             result: rawResult,
+          });
+          // Fire the internal `tool:executed` hook so plugins can observe tool
+          // calls (auto-logging, telemetry, etc.). Short-circuits when nothing
+          // is listening; never throws.
+          await emitToolExecutedHook({
+            toolName: normalizedName,
+            toolCallId,
+            args: coerceParamsRecord(executeParams),
+            result,
+            isError: (result as { isError?: boolean } | null)?.isError === true,
+            durationMs: Date.now() - startedAt,
           });
           return result;
         } catch (err) {
@@ -265,10 +278,19 @@ export function toToolDefinitions(tools: AnyAgentTool[]): ToolDefinition[] {
           });
           logError(`[tools] ${normalizedName} failed: ${described.message} ${inputPreview}`);
 
-          return buildToolExecutionErrorResult({
+          const errorResult = buildToolExecutionErrorResult({
             toolName: normalizedName,
             message: described.message,
           });
+          await emitToolExecutedHook({
+            toolName: normalizedName,
+            toolCallId,
+            args: coerceParamsRecord(executeParams),
+            result: errorResult,
+            isError: true,
+            durationMs: Date.now() - startedAt,
+          });
+          return errorResult;
         }
       },
     } satisfies ToolDefinition;
