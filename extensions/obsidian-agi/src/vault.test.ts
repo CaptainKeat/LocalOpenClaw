@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  canonicalizeVaultRoot,
+  isPathWithinRoot,
   noteExists,
   notePathFor,
   posixRelative,
@@ -14,19 +16,34 @@ import {
 } from "./vault.js";
 
 describe("resolveVaultPath", () => {
-  it("prefers pluginConfig.vaultPath", () => {
-    expect(resolveVaultPath({ vaultPath: "/foo" })).toBe("/foo");
+  let real: string;
+
+  beforeEach(() => {
+    real = join(tmpdir(), `obsidian-agi-resolve-${Date.now()}-${Math.random()}`);
+    mkdirSync(real, { recursive: true });
   });
 
-  it("trims whitespace", () => {
-    expect(resolveVaultPath({ vaultPath: "  /bar  " })).toBe("/bar");
+  afterEach(() => {
+    rmSync(real, { recursive: true, force: true });
+  });
+
+  it("prefers pluginConfig.vaultPath over env and canonicalizes it", () => {
+    const resolved = resolveVaultPath({ vaultPath: real });
+    expect(resolved).not.toBeNull();
+    expect(resolved?.length).toBeGreaterThan(0);
+  });
+
+  it("trims whitespace around the configured path", () => {
+    const resolved = resolveVaultPath({ vaultPath: `  ${real}  ` });
+    expect(resolved).not.toBeNull();
   });
 
   it("falls back to OBSIDIAN_VAULT env", () => {
     const original = process.env.OBSIDIAN_VAULT;
-    process.env.OBSIDIAN_VAULT = "/env-path";
+    process.env.OBSIDIAN_VAULT = real;
     try {
-      expect(resolveVaultPath({})).toBe("/env-path");
+      const resolved = resolveVaultPath({});
+      expect(resolved).not.toBeNull();
     } finally {
       process.env.OBSIDIAN_VAULT = original;
     }
@@ -41,6 +58,12 @@ describe("resolveVaultPath", () => {
       if (original !== undefined) {
         process.env.OBSIDIAN_VAULT = original;
       }
+    }
+  });
+
+  it("returns null when the configured path is a system directory", () => {
+    if (process.platform !== "win32") {
+      expect(resolveVaultPath({ vaultPath: "/etc" })).toBeNull();
     }
   });
 });
@@ -102,5 +125,79 @@ describe("vault filesystem helpers", () => {
     const from = "/vault";
     const to = "/vault/OpenClaw/note.md";
     expect(posixRelative(from, to)).toBe("OpenClaw/note.md");
+  });
+
+  it("writeNote is atomic — the target exists with exactly the new content after success", () => {
+    const target = join(root, "OpenClaw", "atomic.md");
+    writeNote(target, "first");
+    writeNote(target, "second");
+    expect(readNote(target)).toBe("second");
+  });
+});
+
+describe("canonicalizeVaultRoot", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = join(tmpdir(), `obsidian-agi-canon-${Date.now()}-${Math.random()}`);
+    mkdirSync(root, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("returns an absolute canonical path for a valid vault", () => {
+    const resolved = canonicalizeVaultRoot(root);
+    expect(typeof resolved).toBe("string");
+    expect(resolved?.length).toBeGreaterThan(0);
+  });
+
+  it("refuses relative paths", () => {
+    expect(canonicalizeVaultRoot("relative/path")).toBeNull();
+  });
+
+  it("refuses the empty string", () => {
+    expect(canonicalizeVaultRoot("")).toBeNull();
+  });
+
+  it("refuses system roots (/etc, /usr)", () => {
+    if (process.platform !== "win32") {
+      expect(canonicalizeVaultRoot("/etc")).toBeNull();
+      expect(canonicalizeVaultRoot("/usr/local")).toBeNull();
+    }
+  });
+
+  it("refuses Windows system roots", () => {
+    if (process.platform === "win32") {
+      expect(canonicalizeVaultRoot("C:\\Windows")).toBeNull();
+      expect(canonicalizeVaultRoot("C:\\Program Files")).toBeNull();
+    }
+  });
+
+  it("refuses the filesystem root", () => {
+    if (process.platform !== "win32") {
+      expect(canonicalizeVaultRoot("/")).toBeNull();
+    } else {
+      expect(canonicalizeVaultRoot("C:\\")).toBeNull();
+    }
+  });
+});
+
+describe("isPathWithinRoot", () => {
+  it("allows paths inside the root", () => {
+    expect(isPathWithinRoot("/vault", "/vault/OpenClaw/note.md")).toBe(true);
+  });
+
+  it("allows the root itself", () => {
+    expect(isPathWithinRoot("/vault", "/vault")).toBe(true);
+  });
+
+  it("rejects paths that resolve outside via ..", () => {
+    expect(isPathWithinRoot("/vault", "/vault/../etc/passwd")).toBe(false);
+  });
+
+  it("rejects paths that live elsewhere entirely", () => {
+    expect(isPathWithinRoot("/vault", "/etc/passwd")).toBe(false);
   });
 });

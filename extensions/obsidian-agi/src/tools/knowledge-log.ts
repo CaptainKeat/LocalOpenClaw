@@ -6,6 +6,7 @@ import { findRelated } from "../related.js";
 import { extractKeywords, makeDatedSlug, slugify } from "../slug.js";
 import {
   ensureDir,
+  isPathWithinRoot,
   notePathFor,
   posixRelative,
   readNote,
@@ -146,6 +147,19 @@ export function createKnowledgeLogTool(api: OpenClawPluginApi) {
         .join("\n");
 
       const notePath = notePathFor(vaultPath, knowledgeFolder, slug);
+      // Guard against any slug/folder combination that resolves outside the
+      // canonical vault root (e.g. a slug that escapes via `..`).
+      if (!isPathWithinRoot(vaultPath, notePath)) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Blocked: note path resolves outside the vault root (${vaultPath}).`,
+            },
+          ],
+          details: { error: "path_escape", vaultPath, attempted: notePath },
+        };
+      }
       ensureDir(dirname(notePath));
       writeNote(notePath, body);
 

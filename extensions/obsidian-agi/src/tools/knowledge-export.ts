@@ -6,6 +6,7 @@ import { findRelated } from "../related.js";
 import { extractKeywords, makeDatedSlug, slugify } from "../slug.js";
 import {
   ensureDir,
+  isPathWithinRoot,
   notePathFor,
   posixRelative,
   readNote,
@@ -214,6 +215,11 @@ export function createKnowledgeExportTool(api: OpenClawPluginApi) {
           .join("\n");
 
         const notePath = notePathFor(vaultPath, knowledgeFolder, slug);
+        if (!isPathWithinRoot(vaultPath, notePath)) {
+          // Skip this entry rather than aborting the whole batch — one bad
+          // slug shouldn't lose the user their other entries.
+          continue;
+        }
         ensureDir(dirname(notePath));
         writeNote(notePath, body);
         written.push({

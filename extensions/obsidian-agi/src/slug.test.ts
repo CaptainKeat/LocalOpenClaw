@@ -18,6 +18,26 @@ describe("slugify", () => {
   it("strips trailing hyphens", () => {
     expect(slugify("trailing   ", 20)).toBe("trailing");
   });
+
+  it("escapes Windows reserved device names", () => {
+    expect(slugify("CON")).toBe("_con");
+    expect(slugify("nul")).toBe("_nul");
+    expect(slugify("COM1")).toBe("_com1");
+    expect(slugify("LPT9")).toBe("_lpt9");
+  });
+
+  it("does not escape names that merely contain a reserved substring", () => {
+    expect(slugify("contention")).toBe("contention");
+    expect(slugify("consequence")).toBe("consequence");
+    expect(slugify("nullable")).toBe("nullable");
+  });
+
+  it("does not escape hyphenated stems — reserved-name check is exact match on the base", () => {
+    // Once whitespace becomes a hyphen, "con hello" -> "con-hello" which is
+    // NOT one of the reserved device names. Windows only refuses the exact
+    // matches (CON, PRN, etc.), so we leave hyphenated forms alone.
+    expect(slugify("con hello")).toBe("con-hello");
+  });
 });
 
 describe("extractKeywords", () => {

@@ -108,6 +108,32 @@ Deliberate choices:
   aborted, `AbortError`) do not emit — the call was cancelled, not
   executed.
 
+### Security model
+
+Listeners are treated as **untrusted**. A bundled hook or plugin might
+log to disk, stream to a channel, ship to OpenTelemetry, or persist in
+memory. Tool args and results frequently contain API keys, tokens,
+passwords, and credentials. So before the event is assembled:
+
+- `args` and `result` are run through the project-wide
+  `redactToolDetail()` pipeline (the same redactor used for log output).
+  Env-style assignments (`FOO_TOKEN=...`), JSON credential fields
+  (`"apiKey": "..."`, `"token": "..."`, etc.), and other registered
+  patterns are masked.
+- Circular / unserializable payloads resolve to
+  `{ __redacted: "unserializable" }` instead of crashing the emit.
+- Payloads larger than 64 KB (after `JSON.stringify`) resolve to
+  `{ __redacted: "oversized", __size: N }` so a runaway tool result
+  can't OOM a listener that tries to stringify the context.
+- Non-object args (accidentally passed as a primitive) resolve to
+  `{ __redacted: "non-object-args" }` so the typed context invariant
+  holds.
+
+This extends the existing log-redaction guarantee to hook consumers.
+Listeners that want the raw payload can take responsibility in a
+follow-up proposal (e.g., a `trusted: true` registration option gated
+behind core config).
+
 ### Integration point
 
 `src/agents/pi-tool-definition-adapter.ts` is the single provider-

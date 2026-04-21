@@ -101,6 +101,113 @@ describe("emitToolExecutedHook", () => {
   });
 });
 
+describe("emitToolExecutedHook (redaction)", () => {
+  beforeEach(() => {
+    clearInternalHooks();
+    setInternalHooksEnabled(true);
+  });
+
+  afterEach(() => {
+    clearInternalHooks();
+    setInternalHooksEnabled(true);
+  });
+
+  it("redacts secret-looking fields in args before listeners observe them", async () => {
+    const handler = vi.fn();
+    registerInternalHook("tool:executed", handler);
+
+    await emitToolExecutedHook({
+      toolName: "web_fetch",
+      args: {
+        url: "https://example.com",
+        apiKey: "sk-abcdef1234567890abcdef1234567890",
+      },
+      result: { ok: true },
+      isError: false,
+    });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const observedArgs = handler.mock.calls[0]?.[0]?.context?.args as Record<string, unknown>;
+    expect(observedArgs.url).toBe("https://example.com");
+    // The raw API-key value must not reach the listener verbatim.
+    expect(JSON.stringify(observedArgs)).not.toContain("sk-abcdef1234567890abcdef1234567890");
+  });
+
+  it("redacts secret-looking fields in result before listeners observe them", async () => {
+    const handler = vi.fn();
+    registerInternalHook("tool:executed", handler);
+
+    await emitToolExecutedHook({
+      toolName: "github_connect",
+      args: {},
+      result: {
+        ok: true,
+        token: "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      },
+      isError: false,
+    });
+
+    const observed = handler.mock.calls[0]?.[0]?.context?.result;
+    expect(JSON.stringify(observed)).not.toContain("ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+  });
+
+  it("swaps oversized results for a truncation placeholder", async () => {
+    const handler = vi.fn();
+    registerInternalHook("tool:executed", handler);
+
+    const huge = "x".repeat(200_000);
+    await emitToolExecutedHook({
+      toolName: "big",
+      args: {},
+      result: { blob: huge },
+      isError: false,
+    });
+
+    const observed = handler.mock.calls[0]?.[0]?.context?.result as Record<string, unknown>;
+    expect(observed.__redacted).toBe("oversized");
+    expect(typeof observed.__size).toBe("number");
+    // The raw string must NOT appear in the event.
+    expect(JSON.stringify(observed)).not.toContain(huge.slice(0, 200));
+  });
+
+  it("handles circular references without throwing", async () => {
+    const handler = vi.fn();
+    registerInternalHook("tool:executed", handler);
+
+    const circular: Record<string, unknown> = { a: 1 };
+    circular.self = circular;
+
+    await expect(
+      emitToolExecutedHook({
+        toolName: "loop",
+        args: { nested: circular },
+        result: { ok: true },
+        isError: false,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    const observedArgs = handler.mock.calls[0]?.[0]?.context?.args as Record<string, unknown>;
+    expect(observedArgs.__redacted).toBe("unserializable");
+  });
+
+  it("normalizes non-object args (e.g. primitives) to a placeholder", async () => {
+    const handler = vi.fn();
+    registerInternalHook("tool:executed", handler);
+
+    await emitToolExecutedHook({
+      toolName: "weird",
+      // Cast through unknown: exercising the runtime guard, the type says object.
+      args: "password=hunter2" as unknown as Record<string, unknown>,
+      result: null,
+      isError: false,
+    });
+
+    const observedArgs = handler.mock.calls[0]?.[0]?.context?.args as Record<string, unknown>;
+    expect(observedArgs.__redacted).toBe("non-object-args");
+  });
+});
+
 describe("isToolExecutedEvent", () => {
   it("rejects non-tool events", () => {
     expect(

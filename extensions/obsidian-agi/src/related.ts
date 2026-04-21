@@ -1,4 +1,7 @@
-/** Score existing notes by keyword overlap with a new entry. Pure function. */
+/**
+ * Score existing notes by keyword overlap with a new entry. Pure function —
+ * plain `.includes()` substring match against lowercased content, no FTS.
+ */
 
 export type RelatedNote = {
   /** Basename of the note without `.md`. */
