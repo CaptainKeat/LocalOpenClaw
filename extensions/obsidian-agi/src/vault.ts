@@ -112,16 +112,28 @@ export function canonicalizeVaultRoot(rawVaultPath: string): string | null {
 
 /**
  * Assert a target path lies inside (or equal to) the canonical vault root.
- * Guards against `..` escape inside a slug and against symlinks that
- * would redirect a write out of the vault.
+ *
+ * Guards against two independent escape routes:
+ *   1. Lexical `..` in the candidate path (caught via `relative()`).
+ *   2. Symlinks inside the vault that redirect to an outside location
+ *      (caught by `realpathSync`-ing both root and candidate before the
+ *      containment check, so a vault-internal link to `/etc` is rejected).
+ *
+ * If the candidate doesn't exist yet, the nearest existing ancestor is
+ * resolved instead — writes to new files can't fail the check just for
+ * not existing yet, but they can't exploit a nonexistent path either
+ * because their parent dir still has to live under the real root.
  */
 export function isPathWithinRoot(root: string, candidate: string): boolean {
-  const normRoot = resolve(root);
-  const normCandidate = resolve(candidate);
-  if (normCandidate === normRoot) {
+  const realRoot = realpathForCheck(root);
+  const realCandidate = realpathForCheck(candidate);
+  if (!realRoot || !realCandidate) {
+    return false;
+  }
+  if (realCandidate === realRoot) {
     return true;
   }
-  const rel = relative(normRoot, normCandidate);
+  const rel = relative(realRoot, realCandidate);
   if (!rel) {
     return true;
   }
@@ -129,6 +141,33 @@ export function isPathWithinRoot(root: string, candidate: string): boolean {
     return false;
   }
   return true;
+}
+
+/**
+ * Resolve a path to its canonical realpath, walking to the nearest existing
+ * ancestor if the target doesn't exist yet. Returns `null` if resolution
+ * fails entirely (e.g. a permission error or an unreachable filesystem root).
+ */
+function realpathForCheck(p: string): string | null {
+  let target = resolve(p);
+  // Walk up until we hit something that exists so realpathSync has a
+  // base to resolve. Preserve the tail so a not-yet-created note still
+  // gets compared against the real ancestor.
+  let existing = target;
+  while (!existsSync(existing)) {
+    const parent = dirname(existing);
+    if (parent === existing) {
+      return null;
+    }
+    existing = parent;
+  }
+  try {
+    const real = realpathSync(existing);
+    const tail = relative(existing, target);
+    return tail ? resolve(real, tail) : real;
+  } catch {
+    return null;
+  }
 }
 
 export function ensureDir(dir: string): void {

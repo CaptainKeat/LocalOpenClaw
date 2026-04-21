@@ -206,6 +206,51 @@ describe("emitToolExecutedHook (redaction)", () => {
     const observedArgs = handler.mock.calls[0]?.[0]?.context?.args as Record<string, unknown>;
     expect(observedArgs.__redacted).toBe("non-object-args");
   });
+
+  it("handles array-valued args — collapsed to the non-object placeholder with no leak", async () => {
+    const handler = vi.fn();
+    registerInternalHook("tool:executed", handler);
+
+    await emitToolExecutedHook({
+      toolName: "batch_caller",
+      // Arrays ARE objects in JS but aren't plain records — the runtime guard
+      // swaps them for a placeholder so listener sees a predictable shape.
+      args: [
+        { apiKey: "sk-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz" },
+        { token: "ghp_yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy" },
+      ] as unknown as Record<string, unknown>,
+      result: { ok: true },
+      isError: false,
+    });
+
+    // Critically: the raw secrets must not appear anywhere in the event.
+    const serialized = JSON.stringify(handler.mock.calls[0]?.[0]);
+    expect(serialized).not.toContain("sk-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz");
+    expect(serialized).not.toContain("ghp_yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy");
+    const observedArgs = handler.mock.calls[0]?.[0]?.context?.args as Record<string, unknown>;
+    expect(observedArgs.__redacted).toBe("non-object-args");
+  });
+
+  it("redacts secrets inside arrays embedded in the result", async () => {
+    const handler = vi.fn();
+    registerInternalHook("tool:executed", handler);
+
+    await emitToolExecutedHook({
+      toolName: "list_creds",
+      args: {},
+      result: [
+        { name: "primary", token: "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" },
+        { name: "backup", token: "ghp_wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww" },
+      ],
+      isError: false,
+    });
+
+    // `result` takes the normal object branch (typeof []==="object"); the
+    // stringify→redact→parse pipeline should mask the tokens.
+    const serialized = JSON.stringify(handler.mock.calls[0]?.[0]?.context?.result);
+    expect(serialized).not.toContain("ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+    expect(serialized).not.toContain("ghp_wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww");
+  });
 });
 
 describe("isToolExecutedEvent", () => {

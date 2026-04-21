@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -185,19 +185,64 @@ describe("canonicalizeVaultRoot", () => {
 });
 
 describe("isPathWithinRoot", () => {
+  let root: string;
+  let outside: string;
+
+  beforeEach(() => {
+    root = join(tmpdir(), `obsidian-agi-within-${Date.now()}-${Math.random()}`);
+    outside = join(tmpdir(), `obsidian-agi-outside-${Date.now()}-${Math.random()}`);
+    mkdirSync(root, { recursive: true });
+    mkdirSync(outside, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  });
+
   it("allows paths inside the root", () => {
-    expect(isPathWithinRoot("/vault", "/vault/OpenClaw/note.md")).toBe(true);
+    expect(isPathWithinRoot(root, join(root, "OpenClaw", "note.md"))).toBe(true);
   });
 
   it("allows the root itself", () => {
-    expect(isPathWithinRoot("/vault", "/vault")).toBe(true);
+    expect(isPathWithinRoot(root, root)).toBe(true);
   });
 
   it("rejects paths that resolve outside via ..", () => {
-    expect(isPathWithinRoot("/vault", "/vault/../etc/passwd")).toBe(false);
+    expect(isPathWithinRoot(root, join(root, "..", "escape"))).toBe(false);
   });
 
   it("rejects paths that live elsewhere entirely", () => {
-    expect(isPathWithinRoot("/vault", "/etc/passwd")).toBe(false);
+    expect(isPathWithinRoot(root, outside)).toBe(false);
+  });
+
+  it("rejects symlinks inside the vault that point outside", () => {
+    // Skip gracefully on Windows where unprivileged symlink creation fails.
+    try {
+      const linkPath = join(root, "hostile-link");
+      symlinkSync(outside, linkPath, "dir");
+      // Writing through the symlink lands in `outside`, so the check must reject it.
+      expect(isPathWithinRoot(root, join(linkPath, "inside-outside.md"))).toBe(false);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "EPERM") {
+        return; // symlink privilege missing on this platform
+      }
+      throw err;
+    }
+  });
+
+  it("allows symlinks inside the vault that point to another path inside the vault", () => {
+    try {
+      const sibling = join(root, "actual-notes");
+      mkdirSync(sibling, { recursive: true });
+      const linkPath = join(root, "alias");
+      symlinkSync(sibling, linkPath, "dir");
+      expect(isPathWithinRoot(root, join(linkPath, "note.md"))).toBe(true);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "EPERM") {
+        return;
+      }
+      throw err;
+    }
   });
 });
