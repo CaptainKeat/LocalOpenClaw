@@ -170,6 +170,12 @@ Currently supported events:
 - **command:stop**: `/stop` command
 - **agent:bootstrap**: Before workspace bootstrap files are injected
 - **gateway:startup**: Gateway startup (after channels start)
+- **tool:executed**: After any agent tool has produced its final result
+  (success or handled error). `context` is a `ToolExecutedHookContext` with
+  `toolName`, `toolCallId`, `args`, `result`, `isError`, `durationMs`,
+  `agentId`. Fire-and-forget: handler failures never block the agent loop,
+  and the emit site short-circuits when no listeners are registered so the
+  hot path stays cheap.
 
 More event types coming soon (session lifecycle, agent errors, etc.).
 

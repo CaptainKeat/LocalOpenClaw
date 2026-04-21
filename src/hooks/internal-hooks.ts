@@ -177,6 +177,37 @@ export type SessionPatchHookEvent = InternalHookEvent & {
 };
 
 /**
+ * Context carried by tool-execution hook events.
+ *
+ * Fired *after* a tool has executed (successfully or with an error) so that
+ * hooks can observe the call. Hooks MUST NOT mutate `args` or `result`; the
+ * agent runtime has already consumed both. Hook failures are fire-and-forget
+ * — they never block the agent loop.
+ */
+export type ToolExecutedHookContext = {
+  /** Registered tool name (e.g. "knowledge_log", "run_command"). */
+  toolName: string;
+  /** Provider-supplied tool-call id, if known. */
+  toolCallId?: string;
+  /** The params the tool was invoked with. Treat as read-only. */
+  args: Record<string, unknown>;
+  /** The tool's result object as observed by the runtime. */
+  result: unknown;
+  /** Whether the tool returned an error/isError flag. */
+  isError: boolean;
+  /** Wall-clock duration of the execution in milliseconds. */
+  durationMs?: number;
+  /** Agent id that invoked the tool, if known. */
+  agentId?: string;
+};
+
+export type ToolExecutedHookEvent = InternalHookEvent & {
+  type: "tool";
+  action: "executed";
+  context: ToolExecutedHookContext;
+};
+
+/**
  * Registry of hook handlers by event key.
  *
  * Uses a globalThis singleton so that registerInternalHook and
@@ -327,6 +358,50 @@ export function createInternalHookEvent(
     timestamp: new Date(),
     messages: [],
   };
+}
+
+/**
+ * Fire-and-forget emit for tool-execution hook events.
+ *
+ * Intentionally never throws: the agent loop must keep running even if
+ * listeners fail or the hook plumbing is mis-wired. Call this after a tool
+ * has produced its final result (success or handled error).
+ *
+ * Short-circuits when no listeners are registered so the hot path stays
+ * cheap — tools fire frequently.
+ */
+export async function emitToolExecutedHook(
+  context: ToolExecutedHookContext,
+  opts?: { sessionKey?: string },
+): Promise<void> {
+  if (!internalHooksEnabledState.enabled) {
+    return;
+  }
+  if (!hasInternalHookListeners("tool", "executed")) {
+    return;
+  }
+  try {
+    const event = createInternalHookEvent(
+      "tool",
+      "executed",
+      opts?.sessionKey ?? "",
+      context as unknown as Record<string, unknown>,
+    );
+    await triggerInternalHook(event);
+  } catch {
+    // never propagate into the agent loop
+  }
+}
+
+export function isToolExecutedEvent(event: InternalHookEvent): event is ToolExecutedHookEvent {
+  if (!isHookEventTypeAndAction(event, "tool", "executed")) {
+    return false;
+  }
+  const context = getHookContext<ToolExecutedHookContext>(event);
+  if (!context) {
+    return false;
+  }
+  return hasStringContextField(context, "toolName") && hasBooleanContextField(context, "isError");
 }
 
 function isHookEventTypeAndAction(
