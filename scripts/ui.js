@@ -89,10 +89,23 @@ function createSpawnOptions(cmd, args, envOverride) {
   };
 }
 
+// When shell:true is active on Windows, cmd.exe parses the command line and
+// splits on the first unquoted space. Paths like "C:\Program Files\nodejs\
+// pnpm.cmd" then get truncated to "C:\Program". Wrap the cmd in quotes when
+// the shell is in the loop so cmd.exe treats it as one token.
+function quoteForShellIfNeeded(cmd, options) {
+  if (options.shell && process.platform === "win32" && /\s/.test(cmd) && !/^".*"$/.test(cmd)) {
+    return `"${cmd}"`;
+  }
+  return cmd;
+}
+
 function run(cmd, args) {
   let child;
+  const options = createSpawnOptions(cmd, args);
+  const safeCmd = quoteForShellIfNeeded(cmd, options);
   try {
-    child = spawn(cmd, args, createSpawnOptions(cmd, args));
+    child = spawn(safeCmd, args, options);
   } catch (err) {
     console.error(`Failed to launch ${cmd}:`, err);
     process.exit(1);
@@ -112,8 +125,10 @@ function run(cmd, args) {
 
 function runSync(cmd, args, envOverride) {
   let result;
+  const options = createSpawnOptions(cmd, args, envOverride);
+  const safeCmd = quoteForShellIfNeeded(cmd, options);
   try {
-    result = spawnSync(cmd, args, createSpawnOptions(cmd, args, envOverride));
+    result = spawnSync(safeCmd, args, options);
   } catch (err) {
     console.error(`Failed to launch ${cmd}:`, err);
     process.exit(1);

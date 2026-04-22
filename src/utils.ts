@@ -211,4 +211,9 @@ export function displayString(input: string): string {
 }
 
 // Configuration root; can be overridden via OPENCLAW_STATE_DIR.
-export const CONFIG_DIR = resolveConfigDir();
+// Guarded so that merely importing this module from a browser bundle
+// (where `process` is undefined and `fs` doesn't work) doesn't throw at
+// load time. In the browser the value is a sentinel string no one should
+// actually use; browser code that trips into a Node-only path will fail
+// visibly instead of silently misbehaving.
+export const CONFIG_DIR = typeof process !== "undefined" ? resolveConfigDir() : "";

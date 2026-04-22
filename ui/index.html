@@ -9,6 +9,43 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <script>
+      // Browser polyfill for `process` and related Node globals that sneak
+      // into the Control UI bundle via shared source files. Runs before any
+      // module code so top-level server-only evaluations see a safe stub
+      // instead of `ReferenceError: process is not defined`.
+      (function () {
+        if (typeof globalThis.process === "undefined") {
+          globalThis.process = {
+            env: {},
+            argv: [],
+            execArgv: [],
+            execPath: "",
+            platform: "browser",
+            arch: "browser",
+            version: "",
+            versions: { node: "" },
+            cwd: function () { return ""; },
+            chdir: function () {},
+            nextTick: function (fn) {
+              var args = Array.prototype.slice.call(arguments, 1);
+              Promise.resolve().then(function () { fn.apply(null, args); });
+            },
+            exit: function () {},
+            on: function () {},
+            off: function () {},
+            once: function () {},
+            emit: function () {},
+            stdin: null,
+            stdout: { write: function () { return true; }, isTTY: false },
+            stderr: { write: function () { return true; }, isTTY: false },
+          };
+        }
+        if (typeof globalThis.global === "undefined") {
+          globalThis.global = globalThis;
+        }
+      })();
+    </script>
+    <script>
       (function () {
         var THEMES = { claw: 1, knot: 1, dash: 1, goon: 1 };
         var MODES = { system: 1, light: 1, dark: 1 };

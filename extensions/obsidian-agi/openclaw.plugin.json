@@ -18,6 +18,22 @@
         "description": "Max related-note links to include per entry (default 5).",
         "minimum": 0,
         "maximum": 20
+      },
+      "autoLog": {
+        "type": "boolean",
+        "description": "Auto-write a knowledge note for every significant tool call (via the tool:executed hook). Default false.",
+        "default": false
+      },
+      "autoLogSkipTools": {
+        "type": "array",
+        "description": "Extra tool names the auto-logger should never log. Built-in skip list already covers knowledge_* and noisy lookups.",
+        "items": { "type": "string" }
+      },
+      "autoLogMinSignificance": {
+        "type": "number",
+        "description": "Minimum significance score before a tool call is auto-logged (default 2).",
+        "minimum": 0,
+        "maximum": 10
       }
     }
   }

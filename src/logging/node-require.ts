@@ -1,4 +1,9 @@
 export function resolveNodeRequireFromMeta(metaUrl: string): NodeJS.Require | null {
+  // Guarded so this module can be imported from a browser bundle without
+  // throwing at load time: `process` is undefined there.
+  if (typeof process === "undefined") {
+    return null;
+  }
   const getBuiltinModule = (
     process as NodeJS.Process & {
       getBuiltinModule?: (id: string) => unknown;

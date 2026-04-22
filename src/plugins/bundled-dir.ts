@@ -6,7 +6,13 @@ import { resolveOpenClawPackageRootSync } from "../infra/openclaw-root.js";
 import { normalizeOptionalLowercaseString } from "../shared/string-coerce.js";
 import { resolveUserPath } from "../utils.js";
 
-const DISABLED_BUNDLED_PLUGINS_DIR = path.join(os.tmpdir(), "openclaw-empty-bundled-plugins");
+// Lazy so importing this module in a browser bundle (where os.tmpdir is not
+// available) doesn't throw at load time. This path is only used from Node
+// runtime paths; the browser never reaches the callers below.
+const DISABLED_BUNDLED_PLUGINS_DIR =
+  typeof os.tmpdir === "function"
+    ? path.join(os.tmpdir(), "openclaw-empty-bundled-plugins")
+    : "";
 
 function bundledPluginsDisabled(env: NodeJS.ProcessEnv): boolean {
   const raw = normalizeOptionalLowercaseString(env.OPENCLAW_DISABLE_BUNDLED_PLUGINS);
